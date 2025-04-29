@@ -1,1 +1,114 @@
-//first property
+//Screen_ScanAddMedia >> Button_SaveUpload >> OnSelect property
+
+If(
+    UploadedImage.Image = SampleImage, 
+    Notify("Add picture", NotificationType.Error, 3000),
+    Collect(scannedImages, {id:CountRows(scannedImages), image:UploadedImage.Image});
+    Notify("Picture saved, ready to capture more pages. Click 'Review' when finished.", NotificationType.Information, 3000) 
+);
+
+//Screen_ReviewScan >> Button_Retake >> OnSelect property
+
+Navigate(Screen_ScanAddMedia, ScreenTransition.CoverRight);
+Clear(scannedImages);
+
+//Screen_ReviewScan >> Button_ConfirmData >> OnSelect property
+Set(varShowSpinner, true);
+
+UpdateContext({galleryPopUp: true});
+Set(COAImgToPDF, PDF(Gallery_COAPics));
+
+Set(parsedData, COAProcessingFlow.Run({file:{contentBytes:COAImgToPDF, name:"COAPage(s)"}}));
+ClearCollect(
+    parsedProperties,
+    ForAll(
+        Table(ParseJSON(parsedData.properties)),
+        {
+            Properties: Text(Value.Property),
+            TestValues: Value(Value.TestValue),
+            MinValues: Value(Value.MinValue),
+            MaxValues: Value(Value.MaxValue)
+        }
+    )
+);
+
+Set(varShowSpinner, false);
+Navigate(Screen_SubmissionPreview, ScreenTransition.Cover)
+
+//Screen_ReviewUpload >> Button_ConfirmData >> OnSelect property
+
+Set(varShowSpinner, true);
+
+Set(parsedData, COAProcessingFlow.Run({file:{contentBytes:Last(AttachmentControl.Attachments).Value, name:"COAPage(s)"}}));
+ClearCollect(
+    parsedProperties,
+    ForAll(
+        Table(ParseJSON(parsedData.properties)),
+        {
+            Property: Text(Value.Property),
+            TestValue: Value(Value.TestValue),
+            MinValue: Value(Value.MinValue),
+            MaxValue: Value(Value.MaxValue)
+        }
+    )
+);
+Set(varShowSpinner, false);
+Navigate(Screen_SubmissionPreview, ScreenTransition.Cover)
+
+//Screen_SubmissionPreview >> Button_ConfirmSubmission >> OnSelect property
+
+Set(varShowSpinner, true);
+
+Clear(parsedProperties2);
+ForAll(
+    parsedProperties,
+    //Case 1: Both bounds are blank: Review
+    If(
+    MinValue = Blank() And MaxValue = Blank(),
+        Collect(parsedProperties2,{Property: Property, TestValue: TestValue, MinValue: MinValue, MaxValue: MaxValue, PassValue: "Review"}), 
+    //Case 2: Min bound is blank
+    MinValue = Blank() And TestValue < MaxValue, 
+        Collect(parsedProperties2,{Property: Property, TestValue: TestValue, MinValue: MinValue, MaxValue: MaxValue, PassValue: "Pass"}), 
+    MinValue = Blank() And TestValue > MaxValue, 
+        Collect(parsedProperties2,{Property: Property, TestValue: TestValue, MinValue: MinValue, MaxValue: MaxValue, PassValue: "Fail"}), 
+    //Case 3: Max bound is blank
+    MaxValue = Blank() And TestValue < MinValue, 
+        Collect(parsedProperties2,{Property: Property, TestValue: TestValue, MinValue: MinValue, MaxValue: MaxValue, PassValue: "Fail"}), 
+    MaxValue = Blank() And TestValue > MinValue, 
+        Collect(parsedProperties2,{Property: Property, TestValue: TestValue, MinValue: MinValue, MaxValue: MaxValue, PassValue: "Pass"}), 
+    //Case 4: Both bounds are present
+    TestValue > MinValue And TestValue < MaxValue, 
+        Collect(parsedProperties2,{Property: Property, TestValue: TestValue, MinValue: MinValue, MaxValue: MaxValue, PassValue: "Pass"}),  
+    TestValue < MinValue Or TestValue > MaxValue, 
+        Collect(parsedProperties2,{Property: Property, TestValue: TestValue, MinValue: MinValue, MaxValue: MaxValue, PassValue: "Fail"}), 
+    //Default Case: Error
+    Collect(parsedProperties2,{Property: Property, TestValue: TestValue, MinValue: MinValue, MaxValue: MaxValue, PassValue: "Error"}) 
+    )
+);
+
+UpdateContext({COAPass: "Approved"});
+If(!IsEmpty(Filter(parsedProperties2, PassValue = "Review")),
+        UpdateContext({COAPass: "Review"}),
+    !IsEmpty(Filter(parsedProperties2, PassValue = "Fail")),
+        UpdateContext({COAPass: "Rejected"})
+);
+
+If(
+    varRoute = 1,
+    Set(
+        WMPDFOutput, 
+        'PowerAppV2->WatermarkPDF(Overlay),RespondtoaPowerApporflow'.Run(COAPass,{file:{contentBytes:COAImgToPDF, name:"COAPage(s)"}})
+    ),
+    varRoute = 2,
+    Set(
+        WMPDFOutput, 
+        'PowerAppV2->WatermarkPDF(Overlay),RespondtoaPowerApporflow'.Run(COAPass,{file:{contentBytes:Last(AttachmentControl.Attachments).Value, name:"COAPage(s)"}})
+    ),
+    Notify("Error: Proper route not taken, navigate to Welcome screen.", NotificationType.Error, 3000)
+);
+
+Set(varShowSpinner, false); 
+UpdateContext({examinePDF: true});
+Notify("COA submitted successfully.", NotificationType.Success, 3000); 
+Clear(scannedImages);
+Reset(AttachmentControl);
