@@ -1,3 +1,3 @@
 # PowerApps-Snippets
 
-Here we have a few notable snippets of the Power FX code used in the scripting of certain essential controls, particularly buttons, on our PowerApps app.
+Here we have a few notable snippets of the Power FX code used in the scripting of certain essential controls, particularly buttons, on our PowerApps app. There were a plethora of other controls and specifications, although these largely provided just UI/UX surrounding the essential functionalities. 
